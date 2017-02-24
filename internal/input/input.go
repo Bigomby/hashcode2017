@@ -16,7 +16,7 @@ import (
 var Logger *log.Logger
 
 // ParseHeader parses the fist line of the file
-func ParseHeader(input io.Reader) {
+func ParseHeader(input io.Reader) ([]types.Endpoint, []*types.Video, []*types.CacheServer, []types.RequestDescription) {
 	var videosCount int
 	var endpointsCount int
 	var requestsDescriptionsCount int
@@ -42,32 +42,52 @@ func ParseHeader(input io.Reader) {
 		&capacity,
 	)
 
+	serverTemplate := types.CacheServer{
+		Capacity: capacity,
+	}
+
+	var servers []*types.CacheServer
+	for i := 0; i < cacheServersCount; i++ {
+		serverTemplateCopy := serverTemplate
+		servers = append(servers, &serverTemplateCopy)
+	}
+
+	for _, server := range servers {
+		server = new(types.CacheServer)
+		server.Capacity = capacity
+	}
+
 	scanner.Scan()
 	videos := parseVideos(scanner.Text())
 	parseVideos(scanner.Text())
 
 	for i := 0; i < endpointsCount; i++ {
-		endpoints = append(endpoints, parseEndpoint(scanner))
+		endpoints = append(endpoints, parseEndpoint(scanner, servers))
 	}
 
 	for i := 0; i < requestsDescriptionsCount; i++ {
 		requests = append(requests, parseRequest(scanner, videos, endpoints))
 	}
+
+	return endpoints, videos, servers, requests
 }
 
-func parseVideos(line string) []types.Video {
-	var videos []types.Video
+func parseVideos(line string) []*types.Video {
+	var videos []*types.Video
 	sizes := strings.Split(line, " ")
 
-	for _, size := range sizes {
+	for i, size := range sizes {
 		sizeInt, _ := strconv.ParseInt(size, 10, 32)
-		videos = append(videos, types.Video{Size: int(sizeInt)})
+		videos = append(videos, &types.Video{
+			ID:   i,
+			Size: int(sizeInt),
+		})
 	}
 
 	return videos
 }
 
-func parseEndpoint(scanner *bufio.Scanner) types.Endpoint {
+func parseEndpoint(scanner *bufio.Scanner, servers []*types.CacheServer) types.Endpoint {
 	var connections int
 	var latency int
 
@@ -77,15 +97,17 @@ func parseEndpoint(scanner *bufio.Scanner) types.Endpoint {
 
 	endpoint := types.Endpoint{
 		Latency:     latency,
-		Connections: make([]types.Connection, connections),
+		Connections: make([]types.Connection, 0),
 	}
 
 	for i := 0; i < connections; i++ {
 		connection := types.Connection{}
+		var connectionID int
 
 		scanner.Scan()
 		attributes := scanner.Text()
-		fmt.Sscanf(attributes, "%d %d", &connection.ID, &connection.CacheLatency)
+		fmt.Sscanf(attributes, "%d %d", &connectionID, &connection.CacheLatency)
+		connection.Server = servers[connectionID]
 		endpoint.Connections = append(endpoint.Connections, connection)
 	}
 
@@ -94,7 +116,7 @@ func parseEndpoint(scanner *bufio.Scanner) types.Endpoint {
 
 func parseRequest(
 	scanner *bufio.Scanner,
-	videos []types.Video,
+	videos []*types.Video,
 	endpoints []types.Endpoint,
 ) types.RequestDescription {
 	var videoID int
@@ -104,11 +126,11 @@ func parseRequest(
 	scanner.Scan()
 	line := scanner.Text()
 	fmt.Sscanf(line, "%d %d %d", &videoID, &endpointID, &amount)
-	Logger.Debugf("[REQUEST] Amount: %d | Video: %d | Endpoint: %d", amount, videoID, endpointID)
+	// Logger.Debugf("[REQUEST] Amount: %d | Video: %d | Endpoint: %d", amount, videoID, endpointID)
 
 	return types.RequestDescription{
 		Amount: amount,
-		Video:  &videos[videoID],
+		Video:  videos[videoID],
 		Source: &endpoints[endpointID],
 	}
 }

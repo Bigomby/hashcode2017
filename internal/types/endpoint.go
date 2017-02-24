@@ -1,5 +1,20 @@
 package types
 
+// Connections does stuff
+type Connections []Connection
+
+func (slice Connections) Len() int {
+	return len(slice)
+}
+
+func (slice Connections) Less(i, j int) bool {
+	return slice[i].CacheLatency < slice[j].CacheLatency
+}
+
+func (slice Connections) Swap(i, j int) {
+	slice[i], slice[j] = slice[j], slice[i]
+}
+
 // Endpoint represents a group of users connecting to the Internet in the same
 // geographical area (for example, a neighborhood in a city). Every endpoint is
 // connected to the data center. Additionally, each endpoint may (but doesn’t
@@ -11,13 +26,12 @@ package types
 // is connected to (how long it takes to serve a video stored in the given cache
 // server to a user in this endpoint).
 type Endpoint struct {
-	Servers     []*CacheServer
-	Latency     int
 	Connections []Connection
+	Latency     int
 }
 
 // Connection is a connection from an endpoint to a Cache Server
 type Connection struct {
-	ID           int
+	Server       *CacheServer
 	CacheLatency int
 }
